@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from util import load_data, separate_data
 from models.graphcnn import GraphCNN
+from models.graphsgc import GraphSGC
 
 criterion = nn.CrossEntropyLoss()
 
@@ -83,6 +84,9 @@ def main():
     # Training settings
     # Note: Hyper-parameters need to be tuned in order to obtain results reported in the paper.
     parser = argparse.ArgumentParser(description='PyTorch graph convolutional neural net for whole-graph classification')
+    parser.add_argument('--model', type=str, default="GIN",
+                        choices=['GIN', 'SGC'],
+                        help='model to use.')
     parser.add_argument('--dataset', type=str, default="MUTAG",
                         help='name of dataset (default: MUTAG)')
     parser.add_argument('--device', type=int, default=0,
@@ -131,7 +135,11 @@ def main():
     ##10-fold cross validation. Conduct an experiment on the fold specified by args.fold_idx.
     train_graphs, test_graphs = separate_data(graphs, args.seed, args.fold_idx)
 
-    model = GraphCNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+    if args.model == 'GIN':
+        model = GraphCNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+    elif args.model == 'SGC':
+        model = GraphSGC(args.num_layers, train_graphs[0].node_features.shape[1], num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
@@ -149,7 +157,8 @@ def main():
                 f.write("\n")
         print("")
 
-        print(model.eps)
+        if args.model == 'GIN':
+            print(model.eps)
     
 
 if __name__ == '__main__':
