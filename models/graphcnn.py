@@ -111,7 +111,7 @@ class GraphCNN(nn.Module):
     def __preprocess_graphpool(self, batch_graph):
         ###create sum or average pooling sparse matrix over entire nodes in each graph (num graphs x num nodes)
         
-        start_idx = [0]
+        start_idx = [0] # ray: prefix sum of graph nodes
 
         #compute the padded neighbor list
         for i, graph in enumerate(batch_graph):

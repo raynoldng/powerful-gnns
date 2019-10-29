@@ -24,7 +24,7 @@ class S2VGraph(object):
         self.max_neighbor = 0
 
 
-def load_data(dataset, degree_as_tag):
+def load_data(dataset, degree_as_tag, prefix=""):
     '''
         dataset: name of dataset
         test_proportion: ratio of test train split
@@ -36,7 +36,7 @@ def load_data(dataset, degree_as_tag):
     label_dict = {}
     feat_dict = {}
 
-    with open('dataset/%s/%s.txt' % (dataset, dataset), 'r') as f:
+    with open(prefix + 'dataset/%s/%s.txt' % (dataset, dataset), 'r') as f:
         n_g = int(f.readline().strip())
         for i in range(n_g):
             row = f.readline().strip().split()
