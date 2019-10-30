@@ -10,6 +10,7 @@ from tqdm import tqdm
 from util import load_data, separate_data
 from models.graphcnn import GraphCNN
 from models.graphsgc import GraphSGC
+from models.graphgfnn import GraphGFNN
 
 criterion = nn.CrossEntropyLoss()
 
@@ -85,7 +86,7 @@ def main():
     # Note: Hyper-parameters need to be tuned in order to obtain results reported in the paper.
     parser = argparse.ArgumentParser(description='PyTorch graph convolutional neural net for whole-graph classification')
     parser.add_argument('--model', type=str, default="GIN",
-                        choices=['GIN', 'SGC'],
+                        choices=['GIN', 'SGC', 'GFNN'],
                         help='model to use.')
     parser.add_argument('--dataset', type=str, default="MUTAG",
                         help='name of dataset (default: MUTAG)')
@@ -139,6 +140,8 @@ def main():
         model = GraphCNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
     elif args.model == 'SGC':
         model = GraphSGC(args.num_layers, train_graphs[0].node_features.shape[1], num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+    elif args.model == 'GFNN':
+        model = GraphGFNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
 
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
