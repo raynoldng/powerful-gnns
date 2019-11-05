@@ -223,7 +223,6 @@ class GraphCNN(nn.Module):
         for layer, h in enumerate(hidden_rep):
             pooled_h = torch.spmm(graph_pool, h)
             temp = F.dropout(self.linears_prediction[layer](pooled_h), self.final_dropout, training = self.training) # TODO undo this
-            import pdb; pdb.set_trace()
             score_over_layer += temp
 
 

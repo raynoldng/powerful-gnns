@@ -45,16 +45,19 @@ class GraphGFNN(nn.Module):
         # TODO add back support for this
         self.learn_eps = False
 
-        ###List of MLPs
         self.mlps = torch.nn.ModuleList()
+        self.batch_norms = torch.nn.ModuleList()
+        self.linears_prediction = torch.nn.ModuleList()
+        
 
         # Linear function that maps the hidden representation at dofferemt layers into a prediction score
         # self.linears_prediction = torch.nn.ModuleList()   
         for layer in range(num_layers):
-            self.mlps.append(MLP(num_mlp_layers, input_dim, hidden_dim, output_dim))
-            
-        self.mlp = MLP(num_mlp_layers, input_dim * num_layers, hidden_dim * num_layers, output_dim)
+            self.mlps.append(MLP(num_mlp_layers, input_dim, hidden_dim, hidden_dim))
+            self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
 
+            self.linears_prediction.append(nn.Linear(hidden_dim, output_dim))
+        
     def __preprocess_neighbors_maxpool(self, batch_graph):
         ###create padded_neighbor_list in concatenated graph
 
@@ -189,15 +192,14 @@ class GraphGFNN(nn.Module):
 
             hidden_rep.append(h)
 
-        #perform pooling over all nodes in each graph in every layer
-        # for layer, h in enumerate(hidden_rep):
-        #     pooled_h = torch.spmm(graph_pool, h)
-        # score_over_layer += F.dropout(self.mlps[layer](pooled_h),
-        # self.final_dropout, training = self.training)
-        
-        pooled_hidden_rep = [torch.spmm(graph_pool, h) for h in hidden_rep]
-        readout = torch.cat(pooled_hidden_rep, 1)
+        score_over_layer = 0
 
-        score_over_layer = F.dropout(self.mlp(readout), self.final_dropout, training=self.training)
+        for layer, h in enumerate(hidden_rep):
+            pooled_rep = self.mlps[layer](torch.spmm(graph_pool, h))
+            pooled_rep = self.batch_norms[layer](pooled_rep)
+
+            pooled_rep = F.relu(pooled_rep) 
+            score_over_layer += F.dropout(self.linears_prediction[layer](pooled_rep), self.final_dropout, training = self.training) # TODO undo this
+
 
         return score_over_layer

@@ -24,6 +24,8 @@ class S2VGraph(object):
         self.max_neighbor = 0
 
 
+def save_pickle()
+
 def load_data(dataset, degree_as_tag, prefix=""):
     '''
         dataset: name of dataset

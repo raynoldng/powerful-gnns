@@ -4,10 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
+from time import perf_counter
+import pickle
 
 from tqdm import tqdm
 
-from util import load_data, separate_data
+from util import load_data, separate_data, load_pickle, save_pickle
 from models.graphcnn import GraphCNN
 from models.graphsgc import GraphSGC
 from models.graphgfnn import GraphGFNN
@@ -18,7 +20,8 @@ def train(args, model, device, train_graphs, optimizer, epoch):
     model.train()
 
     total_iters = args.iters_per_epoch
-    pbar = tqdm(range(total_iters), unit='batch')
+    # pbar = tqdm(range(total_iters), unit='batch')
+    pbar = range(total_iters)
 
     loss_accum = 0
     for pos in pbar:
@@ -43,7 +46,7 @@ def train(args, model, device, train_graphs, optimizer, epoch):
         loss_accum += loss
 
         #report
-        pbar.set_description('epoch: %d' % (epoch))
+        # pbar.set_description('epoch: %d' % (epoch))
 
     average_loss = loss_accum/total_iters
     print("loss training: %f" % (average_loss))
@@ -131,8 +134,12 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(0)
 
-    graphs, num_classes = load_data(args.dataset, args.degree_as_tag)
-
+    # try loading the pickle first
+    try:
+        graphs, num_classes = load_pickle(args.dataset, args.degree_as_tag)
+    except FileNotFoundError:
+        graphs, num_classes = load_data(args.dataset, args.degree_as_tag)
+        save_pickle(graphs, num_classes, args.dataset, args.degree_as_tag)
     ##10-fold cross validation. Conduct an experiment on the fold specified by args.fold_idx.
     train_graphs, test_graphs = separate_data(graphs, args.seed, args.fold_idx)
 
@@ -147,12 +154,15 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
 
+    start_time = perf_counter()
+    best_test_acc = 0
 
     for epoch in range(1, args.epochs + 1):
         scheduler.step()
 
         avg_loss = train(args, model, device, train_graphs, optimizer, epoch)
         acc_train, acc_test = test(args, model, device, train_graphs, test_graphs, epoch)
+        best_test_acc = max(best_test_acc, acc_test)
 
         if not args.filename == "":
             with open(args.filename, 'w') as f:
@@ -160,8 +170,13 @@ def main():
                 f.write("\n")
         print("")
 
-        if args.model == 'GIN':
-            print(model.eps)
+        # if args.model == 'GIN':
+        #     print(model.eps)
+
+
+    print(f"Epoch: {epoch}")
+    print(f"Best test acc: {best_test_acc}")
+    print(f"Total train time: {perf_counter() - start_time}")
     
 
 if __name__ == '__main__':
