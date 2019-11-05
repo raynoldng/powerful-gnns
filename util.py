@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 import random
 import torch
+import pickle
 from sklearn.model_selection import StratifiedKFold
 
 class S2VGraph(object):
@@ -24,7 +25,26 @@ class S2VGraph(object):
         self.max_neighbor = 0
 
 
-def save_pickle()
+def save_pickle(graphs, num_classes, dataset, degree_as_tag):
+    '''
+        dataset: name of dataset
+    '''
+    tag = 'degree_as_tag' if degree_as_tag else 'no_degree'
+    pickle.dump(graphs, open('dataset/%s/%s.%s.graphs.pkl' % (dataset, dataset, tag), 'wb'))
+    pickle.dump(num_classes, open('dataset/%s/%s.%s.num_classes.pkl' % (dataset, dataset, tag), 'wb'))
+
+
+def load_pickle(dataset, degree_as_tag):
+    '''
+        dataset: name of dataset
+        degree_as_tag: whether input node features should include degree of nodes
+    '''
+    tag = 'degree_as_tag' if degree_as_tag else 'no_degree'
+    graphs = pickle.load(open('dataset/%s/%s.%s.graphs.pkl' % (dataset, dataset, tag), 'rb'))
+    num_classes = pickle.load(open('dataset/%s/%s.%s.num_classes.pkl' % (dataset, dataset, tag), 'rb'))
+    
+    return graphs, num_classes
+
 
 def load_data(dataset, degree_as_tag, prefix=""):
     '''

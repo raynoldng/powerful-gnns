@@ -6,6 +6,7 @@ import torch.optim as optim
 import numpy as np
 from time import perf_counter
 import pickle
+from statistics import stdev
 
 from tqdm import tqdm
 
@@ -13,6 +14,7 @@ from util import load_data, separate_data, load_pickle, save_pickle
 from models.graphcnn import GraphCNN
 from models.graphsgc import GraphSGC
 from models.graphgfnn import GraphGFNN
+from models.graphds import GraphDS
 
 criterion = nn.CrossEntropyLoss()
 
@@ -49,7 +51,7 @@ def train(args, model, device, train_graphs, optimizer, epoch):
         # pbar.set_description('epoch: %d' % (epoch))
 
     average_loss = loss_accum/total_iters
-    print("loss training: %f" % (average_loss))
+    # print("loss training: %f" % (average_loss))
     
     return average_loss
 
@@ -80,7 +82,7 @@ def test(args, model, device, train_graphs, test_graphs, epoch):
     correct = pred.eq(labels.view_as(pred)).sum().cpu().item()
     acc_test = correct / float(len(test_graphs))
 
-    print("accuracy train: %f test: %f" % (acc_train, acc_test))
+    # print("accuracy train: %f test: %f" % (acc_train, acc_test))
 
     return acc_train, acc_test
 
@@ -89,7 +91,7 @@ def main():
     # Note: Hyper-parameters need to be tuned in order to obtain results reported in the paper.
     parser = argparse.ArgumentParser(description='PyTorch graph convolutional neural net for whole-graph classification')
     parser.add_argument('--model', type=str, default="GIN",
-                        choices=['GIN', 'SGC', 'GFNN'],
+                        choices=['GIN', 'SGC', 'GFNN', 'GDS'],
                         help='model to use.')
     parser.add_argument('--dataset', type=str, default="MUTAG",
                         help='name of dataset (default: MUTAG)')
@@ -125,6 +127,7 @@ def main():
     					help='let the input node features be the degree of nodes (heuristics for unlabeled graph)')
     parser.add_argument('--filename', type = str, default = "",
                                         help='output file')
+    parser.add_argument('--all', action="store_true", help="run on all folds")
     args = parser.parse_args()
 
     #set up seeds and gpu device
@@ -137,47 +140,56 @@ def main():
     # try loading the pickle first
     try:
         graphs, num_classes = load_pickle(args.dataset, args.degree_as_tag)
-    except FileNotFoundError:
+    except OSError as e:
+        print("Pickle not found, loading from raw data instead")
         graphs, num_classes = load_data(args.dataset, args.degree_as_tag)
         save_pickle(graphs, num_classes, args.dataset, args.degree_as_tag)
-    ##10-fold cross validation. Conduct an experiment on the fold specified by args.fold_idx.
-    train_graphs, test_graphs = separate_data(graphs, args.seed, args.fold_idx)
 
-    if args.model == 'GIN':
-        model = GraphCNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
-    elif args.model == 'SGC':
-        model = GraphSGC(args.num_layers, train_graphs[0].node_features.shape[1], num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
-    elif args.model == 'GFNN':
-        model = GraphGFNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+    ##10-fold cross validation. Conduct an experiment on the fold specified by
+
+    folds = [args.fold_idx] if not args.all else range(5) # run on first 5 folds for now
+    scores = []
+    for fold_idx in folds:
+        train_graphs, test_graphs = separate_data(graphs, args.seed, args.fold_idx)
+
+        if args.model == 'GIN':
+            model = GraphCNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.learn_eps, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+        elif args.model == 'SGC':
+            model = GraphSGC(args.num_layers, train_graphs[0].node_features.shape[1], num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+        elif args.model == 'GFNN':
+            model = GraphGFNN(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+        elif args.model == 'GDS':
+            model = GraphDS(args.num_layers, args.num_mlp_layers, train_graphs[0].node_features.shape[1], args.hidden_dim, num_classes, args.final_dropout, args.graph_pooling_type, args.neighbor_pooling_type, device).to(device)
+
+        optimizer = optim.Adam(model.parameters(), lr=args.lr)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+
+        start_time = perf_counter()
+        best_test_acc = 0
+
+        # for epoch in range(1, args.epochs + 1):
+        for epoch in tqdm(range(1, args.epochs + 1)):
+        # pbar = tqdm(range(total_iters), unit='batch')
+            scheduler.step()
+
+            avg_loss = train(args, model, device, train_graphs, optimizer, epoch)
+            acc_train, acc_test = test(args, model, device, train_graphs, test_graphs, epoch)
+            best_test_acc = max(best_test_acc, acc_test)
+
+            if not args.filename == "":
+                with open(args.filename, 'w') as f:
+                    f.write("%f %f %f" % (avg_loss, acc_train, acc_test))
+                    f.write("\n")
+
+            # if args.model == 'GIN':
+            #     print(model.eps)
 
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+        print(f"Best test acc: {best_test_acc}")
+        print(f"Total train time: {perf_counter() - start_time}")
+        scores.append(best_test_acc * 100)
 
-    start_time = perf_counter()
-    best_test_acc = 0
-
-    for epoch in range(1, args.epochs + 1):
-        scheduler.step()
-
-        avg_loss = train(args, model, device, train_graphs, optimizer, epoch)
-        acc_train, acc_test = test(args, model, device, train_graphs, test_graphs, epoch)
-        best_test_acc = max(best_test_acc, acc_test)
-
-        if not args.filename == "":
-            with open(args.filename, 'w') as f:
-                f.write("%f %f %f" % (avg_loss, acc_train, acc_test))
-                f.write("\n")
-        print("")
-
-        # if args.model == 'GIN':
-        #     print(model.eps)
-
-
-    print(f"Epoch: {epoch}")
-    print(f"Best test acc: {best_test_acc}")
-    print(f"Total train time: {perf_counter() - start_time}")
-    
+    print(f"mean: {sum(scores) / len(scores)}, std: {stdev(scores)}") 
 
 if __name__ == '__main__':
     main()

@@ -195,10 +195,12 @@ class GraphGFNN(nn.Module):
         score_over_layer = 0
 
         for layer, h in enumerate(hidden_rep):
-            pooled_rep = self.mlps[layer](torch.spmm(graph_pool, h))
-            pooled_rep = self.batch_norms[layer](pooled_rep)
+            h_rep = self.mlps[layer](h)
+            pooled_rep = torch.spmm(graph_pool, h_rep)
+            # pooled_rep = self.mlps[layer](torch.spmm(graph_pool, h))
+            # pooled_rep = self.batch_norms[layer](pooled_rep)
 
-            pooled_rep = F.relu(pooled_rep) 
+            # pooled_rep = F.relu(pooled_rep) 
             score_over_layer += F.dropout(self.linears_prediction[layer](pooled_rep), self.final_dropout, training = self.training) # TODO undo this
 
 
