@@ -42,8 +42,11 @@ class GraphSGC(nn.Module):
 
         # Linear function that maps the hidden representation at dofferemt layers into a prediction score
         self.linears_prediction = torch.nn.ModuleList()
+        self.batch_norms = torch.nn.ModuleList()
+
         for layer in range(num_layers):
             self.linears_prediction.append(nn.Linear(input_dim, output_dim))
+            self.batch_norms.append(nn.BatchNorm1d(input_dim))
 
     def __preprocess_neighbors_maxpool(self, batch_graph):
         ###create padded_neighbor_list in concatenated graph
@@ -154,7 +157,7 @@ class GraphSGC(nn.Module):
                 #If average pooling
                 degree = torch.spmm(Adj_block, torch.ones((Adj_block.shape[0], 1)).to(self.device))
                 pooled = pooled/degree
-
+        h = pooled # only normalize at the end
         return h
 
     def forward(self, batch_graph):
@@ -183,7 +186,7 @@ class GraphSGC(nn.Module):
     
         #perform pooling over all nodes in each graph in every layer
         for layer, h in enumerate(hidden_rep):
-            pooled_h = torch.spmm(graph_pool, h)
+            pooled_h = self.batch_norms[layer](torch.spmm(graph_pool, h))
             score_over_layer += F.dropout(self.linears_prediction[layer](pooled_h), self.final_dropout, training = self.training)
 
         return score_over_layer

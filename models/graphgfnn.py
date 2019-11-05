@@ -1,3 +1,5 @@
+"""Poor results dont use
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -163,7 +165,7 @@ class GraphGFNN(nn.Module):
                 degree = torch.spmm(Adj_block, torch.ones((Adj_block.shape[0], 1)).to(self.device))
                 pooled = pooled/degree
 
-        return h
+        return pooled
 
     def forward(self, batch_graph):
         X_concat = torch.cat([graph.node_features for graph in batch_graph], 0).to(self.device)
